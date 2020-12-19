@@ -1,3 +1,5 @@
+[![Donate](https://img.shields.io/badge/Donate-PayPal-orange.svg)](https://www.paypal.com/donate/?cmd=_donations&business=8UK2BZP2K8NSS)
+
 # Arduino Sketches
 This repository contains my Arduino Sketches. Those are:
 - **serial_led**: a program that turns on and off a led based on a character sent via serial port.
