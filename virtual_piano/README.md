@@ -8,3 +8,5 @@ Virtual piano that plays a different note according to the distance between an u
  - Arduino Nano
  
 ## Schematics
+
+![Schematics](virtual_piano.png)
