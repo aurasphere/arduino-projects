@@ -7,3 +7,4 @@ This repository contains my Arduino Sketches. Those are:
 - **serial_echo**: a program that sends any string received through serial port back via the same serial port. The purpose of this program is to test Bluetooth connections.
 - **smart_carillon**: a program that handles a smart carillon. The program allows a device to connect via Bluetooth and send a melody to the carillon. The melody is stored into the Arduino EEPROM and can then be played at any time by pressing a button.
 - **humidity_reader**: a program to read humidity and temperature and display it on an LCD display.
+- **virtual_piano**: a program to play a piano using distance between an ultrasonic sensor.
