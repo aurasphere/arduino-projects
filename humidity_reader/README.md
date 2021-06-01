@@ -8,3 +8,5 @@ Humidity and temperature reader. Readings are shown both on serial monitor and a
  - Arduino Nano
  
 ## Schematics
+
+![Schematics](humidity_reader.png)
