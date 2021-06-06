@@ -1,21 +1,22 @@
 void printMenu() {
   Serial.println("Smart carillon");
-  Serial.println("Select one of the following options by pressing the respective character:");
-  Serial.println("n: insert a (N)ew melody");
-  Serial.println("p: (P)lay current melody");
-  Serial.println("i: (I)nteractive mode");
-  Serial.println("e: print (E)EPROM content");
+  Serial.println("Note format is <pitch>:<duration>. Available commands:");
+  Serial.println("n <note_1> <note_2> ... <note_n>: plays the given notes");
+  Serial.println("s <note_1> <note_2> ... <note_n>: saves the given melody into EEPROM");
+  Serial.println("p: plays the current melody");
+  Serial.println("e: prints the EEPROM content");
 }
 
 void handleMenuInput() {
-  char menuSelection[3];
-  Serial.readBytesUntil(SERIALIZED_EOS_CHAR, menuSelection, 3);
-  switch (menuSelection[0]) {
-    case 'i':
-      interactiveMode();
-      break;
+    //   6 char per note atm
+  char inputBuffer[323];
+  Serial.readBytesUntil(SERIALIZED_EOS_CHAR, inputBuffer, 323);
+  switch (inputBuffer[0]) {
     case 'n':
-      saveMelodyFromSerial();
+      playNotes(inputBuffer);
+      break;
+    case 's':
+      saveMelodyFromSerial(inputBuffer);
       break;
     case 'p':
       playMelody();
@@ -24,24 +25,21 @@ void handleMenuInput() {
       printEepromContent();
       break;
   }
+  Serial.println("OK");
   printMenu();
 }
 
-void saveMelodyFromSerial() {
-  Serial.println("You can register a new melody by sending a sequence of values separed by whitespace. Each note is represented in format <pitch>:<duration>");
+void saveMelodyFromSerial(char* msgBuffer) {
   Note melodyBuffer[MAX_MELODY_LENGTH];
+  uint16_t melodyLength = parseNotes(msgBuffer, melodyBuffer);
+  saveDataToEeprom(melodyBuffer, melodyLength);
+}
 
-  //   6 char per note atm
-  int msgLength = 320;
-  char msgBuffer[msgLength];
-
-  waitForInput();
-
-  Serial.readBytesUntil(SERIALIZED_EOS_CHAR, msgBuffer, msgLength);
-
+uint16_t parseNotes(char* msgBuffer, Note* melodyBuffer){
   uint16_t melodyLength = 0;
-  char* token;
-  token = strtok(msgBuffer, ":");
+  // Clears the buffer
+  char* token = strtok(msgBuffer, " ");
+  token = strtok(NULL, ":");
   while (token != NULL) {
     uint8_t pitch = atoi(token);
 
@@ -59,19 +57,11 @@ void saveMelodyFromSerial() {
     melodyLength++;
     token = strtok(NULL, ":");
   }
-
-  saveDataToEeprom(melodyBuffer, melodyLength);
-  Serial.println("Succesfully saved melody");
+  return melodyLength;
 }
 
-void interactiveMode() {}
-
-void clearSerial() {
-  while (Serial.available() != 0) {
-    Serial.read();
-  }
-}
-
-void waitForInput() {
-  while (Serial.available() == 0) {}
+void playNotes(char* msgBuffer) {
+  Note melodyBuffer[MAX_MELODY_LENGTH];
+  uint16_t melodyLength = parseNotes(msgBuffer, melodyBuffer);
+  playMelody(melodyBuffer, melodyLength);
 }

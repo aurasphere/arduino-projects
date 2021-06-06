@@ -58,13 +58,15 @@ void setup() {
   pinMode(BUTTON, INPUT_PULLUP);
 }
 
-void playMelody() {
-  Note* melody = loadMelodyFromEeprom();
-  uint16_t melodyLength = loadMelodyLengthFromEeprom();
+void playMelody(Note* melody, uint16_t melodyLength) {
   for (uint8_t i = 0; i < melodyLength; i++) {
     Note note = melody[i];
     uint16_t pitch = pgm_read_word(NOTES + note.pitch);
     uint16_t duration = note.duration * 10;
+
+    Serial.print(note.pitch);
+    Serial.print(":");
+    Serial.print(duration);
 
     // Plays a note.
     tone(BUZZER, pitch, duration);
@@ -74,9 +76,15 @@ void playMelody() {
     // Plays the note for the specified duration.
     delay(duration);
   }
-
   delete[] melody;
   clearLeds();
+}
+
+
+void playMelody() {
+  Note* melody = loadMelodyFromEeprom();
+  uint16_t melodyLength = loadMelodyLengthFromEeprom();
+  playMelody(melody, melodyLength);
 }
 
 void loop() {
