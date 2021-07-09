@@ -1,22 +1,9 @@
 #include "pitches.h"
-#include <EEPROM.h>
+#include <avr/eeprom.h>
+#include <toneAC.h>
 
 #define MAX_MELODY_LENGTH 255
-#define SERIALIZED_PITCH_DURATION_SEPARATOR ':'
-#define SERIALIZED_NOTES_SEPARATOR ' '
 #define SERIALIZED_EOS_CHAR '\n'
-
-// Constant sizes of variables
-#define INT_SIZE sizeof(int)
-#define UNSIGNED_INT_SIZE sizeof(uint16_t)
-#define UNSIGNED_SHORT_INT_SIZE sizeof(uint8_t)
-
-// Note types
-#define NOTE_STANDARD 500
-#define NOTE_HALF NOTE_STANDARD / 2
-#define NOTE_DOUBLE NOTE_STANDARD * 2
-#define NOTE_FULL NOTE_STANDARD * 4
-#define NOTE_THREE_QUARTER NOTE_STANDARD + NOTE_HALF
 
 // Button
 #define BUTTON 6
@@ -29,19 +16,31 @@
 #define YELLOW 11
 #define RED 12
 
-__attribute__((optimize("O0")))
+// TODO: needed?
+//__attribute__((optimize("O0")))
 
 // Stored on flash memory to save RAM.
-const uint16_t NOTES[] PROGMEM = {NOTE_B0 , NOTE_C1 , NOTE_CS1 , NOTE_D1 , NOTE_DS1 , NOTE_E1 , NOTE_F1 , NOTE_FS1 , NOTE_G1 , NOTE_GS1 , NOTE_A1 , NOTE_AS1 , NOTE_B1 , NOTE_C2 , NOTE_CS2 , NOTE_D2 , NOTE_DS2 , NOTE_E2 , NOTE_F2 , NOTE_FS2 , NOTE_G2 , NOTE_GS2 , NOTE_A2 , NOTE_AS2 , NOTE_B2 , NOTE_C3 , NOTE_CS3 , NOTE_D3 , NOTE_DS3 , NOTE_E3 , NOTE_F3 , NOTE_FS3 , NOTE_G3 , NOTE_GS3 , NOTE_A3 , NOTE_AS3 , NOTE_B3 , NOTE_C4 , NOTE_CS4 , NOTE_D4 , NOTE_DS4 , NOTE_E4 , NOTE_F4 , NOTE_FS4 , NOTE_G4 , NOTE_GS4 , NOTE_A4 , NOTE_AS4 , NOTE_B4 , NOTE_C5 , NOTE_CS5 , NOTE_D5 , NOTE_DS5 , NOTE_E5 , NOTE_F5 , NOTE_FS5 , NOTE_G5 , NOTE_GS5 , NOTE_A5 , NOTE_AS5 , NOTE_B5 , NOTE_C6 , NOTE_CS6 , NOTE_D6 , NOTE_DS6 , NOTE_E6 , NOTE_F6 , NOTE_FS6 , NOTE_G6 , NOTE_GS6 , NOTE_A6 , NOTE_AS6 , NOTE_B6 , NOTE_C7 , NOTE_CS7 , NOTE_D7 , NOTE_DS7 , NOTE_E7 , NOTE_F7 , NOTE_FS7 , NOTE_G7 , NOTE_GS7 , NOTE_A7 , NOTE_AS7 , NOTE_B7 , NOTE_C8 , NOTE_CS8 , NOTE_D8 , NOTE_DS8};
+const uint16_t NOTES[] PROGMEM = {NOTE_C1, NOTE_D1, NOTE_E1, NOTE_F1, NOTE_G1, NOTE_A1, NOTE_B1, NOTE_C2, NOTE_D2, NOTE_E2, NOTE_F2, NOTE_G2, NOTE_A2, NOTE_B2, NOTE_C3, NOTE_D3, NOTE_E3, NOTE_F3, NOTE_G3, NOTE_A3, NOTE_B3, NOTE_C4, NOTE_D4, NOTE_E4, NOTE_F4, NOTE_G4, NOTE_A4, NOTE_B4, NOTE_C5, NOTE_D5, NOTE_E5, NOTE_F5, NOTE_G5, NOTE_A5, NOTE_B5, NOTE_C6, NOTE_D6, NOTE_E6, NOTE_F6, NOTE_G6, NOTE_A6, NOTE_B6, NOTE_C7, NOTE_D7, NOTE_E7, NOTE_F7, NOTE_G7, NOTE_A7, NOTE_B7};
 
+const uint16_t NOTES_ALTERED[] PROGMEM = {NOTE_CS1, NOTE_DS1, NOTE_E1, NOTE_FS1, NOTE_GS1, NOTE_AS1, NOTE_B1, NOTE_CS2, NOTE_DS2, NOTE_E2, NOTE_FS2, NOTE_GS2, NOTE_AS2, NOTE_B2, NOTE_CS3, NOTE_DS3, NOTE_E3, NOTE_FS3, NOTE_GS3, NOTE_AS3, NOTE_B3, NOTE_CS4, NOTE_DS4, NOTE_E4, NOTE_FS4, NOTE_GS4, NOTE_AS4, NOTE_B4, NOTE_CS5, NOTE_DS5, NOTE_E5, NOTE_FS5, NOTE_GS5, NOTE_AS5, NOTE_B5, NOTE_CS6, NOTE_DS6, NOTE_E6, NOTE_FS6, NOTE_GS6, NOTE_AS6, NOTE_B6, NOTE_CS7, NOTE_DS7, NOTE_E7, NOTE_FS7, NOTE_GS7, NOTE_AS7, NOTE_B7};
+
+// Supported durations:
+// 0 -> whole note
+// 1 -> half note
+// 2 -> quarter note
+// 3 -> eight note
 struct Note {
-  uint8_t pitch;
-  uint16_t duration;
+  uint8_t pitch : 3;
+  uint8_t duration : 2;
+  uint8_t octave : 3;
+  boolean extended : 1;
+  boolean altered : 1;
 };
 
-struct InMemoryNote {
-  uint16_t pitchAddress;
-  uint16_t durationAddress;
+struct MelodyInfo {
+  uint8_t bpm;
+  uint8_t beatUnit;
+  uint16_t length;
 };
 
 void setup() {
@@ -58,19 +57,34 @@ void setup() {
   pinMode(BUTTON, INPUT_PULLUP);
 }
 
-void playMelody(Note* melody, uint16_t melodyLength) {
-  for (uint8_t i = 0; i < melodyLength; i++) {
+void playMelody(Note* melody, MelodyInfo melodyInfo) {
+  uint16_t beatMillis = 60000 / melodyInfo.bpm;
+  printMelodyInfo(melodyInfo);
+  for (uint8_t i = 0; i < melodyInfo.length; i++) {
     Note note = melody[i];
-    uint16_t pitch = pgm_read_word(NOTES + note.pitch);
-    uint16_t duration = note.duration * 10;
+    uint16_t duration = beatMillis * pow(2, note.duration - melodyInfo.beatUnit) * (note.extended ? 1.5 : 1);
+    Serial.println(pow(2, melodyInfo.beatUnit - note.duration));
+    Serial.println((note.extended ? 1.5 : 1));
+    Serial.println(beatMillis);
+    Serial.println(duration);
 
-    Serial.print(note.pitch);
-    Serial.print(":");
-    Serial.print(duration);
+    printNote(note);
+
+    // Pitch of 0 is a rest.
+    if (note.pitch == 0) {
+      delay(duration);
+      clearLeds();
+      continue;
+    }
+
+    Serial.println(((note.pitch - 1) + (7 * note.octave)));
+    uint16_t pitch = pgm_read_word((note.altered ? NOTES_ALTERED : NOTES) + ((note.pitch - 1)  + (7 * (note.octave - 1))));
+    Serial.println(pitch);
 
     // Plays a note.
     tone(BUZZER, pitch, duration);
-
+//    toneAC(pitch, 10, duration);
+    
     randomizeLeds();
 
     // Plays the note for the specified duration.
@@ -82,9 +96,10 @@ void playMelody(Note* melody, uint16_t melodyLength) {
 
 
 void playMelody() {
-  Note* melody = loadMelodyFromEeprom();
-  uint16_t melodyLength = loadMelodyLengthFromEeprom();
-  playMelody(melody, melodyLength);
+  MelodyInfo melodyInfo = loadMelodyInfoFromEeprom();
+  Note melody[melodyInfo.length];
+  loadMelodyFromEeprom(melodyInfo, melody);
+  playMelody(melody, melodyInfo);
 }
 
 void loop() {
